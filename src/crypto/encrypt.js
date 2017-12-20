@@ -19,8 +19,11 @@ import {
 	convertPrivateKeyEd2Curve,
 	convertPublicKeyEd2Curve,
 } from './convert';
-import hash from './hash';
 import { getPrivateAndPublicKeyBytesFromPassphrase } from './keys';
+
+const PBKDF2_ITERATIONS = 100e3;
+const PBKDF2_KEYLEN = 32;
+const PBKDF2_HASH_FUNCTION = 'sha256';
 
 export const encryptMessageWithPassphrase = (
 	message,
@@ -101,6 +104,15 @@ export const decryptMessageWithPassphrase = (
 	}
 };
 
+const getKeyFromPassword = (password, salt) =>
+	crypto.pbkdf2Sync(
+		password,
+		salt,
+		PBKDF2_ITERATIONS,
+		PBKDF2_KEYLEN,
+		PBKDF2_HASH_FUNCTION,
+	);
+
 /**
  * @method encryptAES256GCMWithPassword
  * @param {String} plainText utf8 - any utf8 string
@@ -111,8 +123,10 @@ export const decryptMessageWithPassphrase = (
 
 const encryptAES256GCMWithPassword = (plainText, password) => {
 	const iv = crypto.randomBytes(16);
-	const passwordHash = hash(password, 'utf8');
-	const cipher = crypto.createCipheriv('aes-256-gcm', passwordHash, iv);
+	const salt = crypto.randomBytes(16);
+	const key = getKeyFromPassword(password, salt);
+
+	const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 	const firstBlock = cipher.update(plainText, 'utf8');
 	const encrypted = Buffer.concat([firstBlock, cipher.final()]);
 	const tag = cipher.getAuthTag();
@@ -120,6 +134,7 @@ const encryptAES256GCMWithPassword = (plainText, password) => {
 	return {
 		cipher: encrypted.toString('hex'),
 		iv: iv.toString('hex'),
+		salt: salt.toString('hex'),
 		tag: tag.toString('hex'),
 	};
 };
@@ -146,14 +161,11 @@ const getTagBuffer = tag => {
  * @return {String} utf8
  */
 
-const decryptAES256GCMWithPassword = ({ cipher, iv, tag }, password) => {
+const decryptAES256GCMWithPassword = ({ cipher, iv, salt, tag }, password) => {
 	const tagBuffer = getTagBuffer(tag);
-	const passwordHash = hash(password, 'utf8');
-	const decipher = crypto.createDecipheriv(
-		'aes-256-gcm',
-		passwordHash,
-		hexToBuffer(iv),
-	);
+	const key = getKeyFromPassword(password, hexToBuffer(salt));
+
+	const decipher = crypto.createDecipheriv('aes-256-gcm', key, hexToBuffer(iv));
 	decipher.setAuthTag(tagBuffer);
 	const firstBlock = decipher.update(hexToBuffer(cipher));
 	const decrypted = Buffer.concat([firstBlock, decipher.final()]);
