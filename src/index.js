@@ -18,9 +18,9 @@
  * @main lisk
  */
 import naclFactory from 'js-nacl';
-import Mnemonic from 'bip39';
 import api from './api/liskApi';
 import crypto from './crypto';
+import passphrase from './passphrase';
 import * as time from './transactions/utils/time';
 import transaction from './transactions';
 
@@ -31,4 +31,4 @@ naclFactory.instantiate(nacl => {
 	naclInstance = nacl;
 });
 
-export default { crypto, transaction, api, time, Mnemonic };
+export default { crypto, transaction, api, time, passphrase };
